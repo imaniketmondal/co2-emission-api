@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import numpy as np
 import pickle
-from huggingface_hub import hf_hub_download
+import requests
+import os
 import logging
 
 app = FastAPI()
@@ -10,20 +11,26 @@ app = FastAPI()
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 
-# Download and load the model
+# Define direct model download URL from Hugging Face
+MODEL_URL = "https://huggingface.co/iamaniketmondal/co2-emission-model/resolve/main/forecasting_co2_emmision.pkl"
+MODEL_PATH = "model.pkl"
+
+# Download the model if not already downloaded
 model = None
 try:
-    logging.info("Downloading model from Hugging Face...")
-    model_path = hf_hub_download(
-        repo_id="iamaniketmondal/co2-emission-model",
-        filename="forecasting_co2_emmision.pkl",
-        repo_type="model"
-    )
-    with open(model_path, "rb") as f:
+    if not os.path.exists(MODEL_PATH):
+        logging.info("Downloading model from Hugging Face via direct URL...")
+        response = requests.get(MODEL_URL)
+        with open(MODEL_PATH, "wb") as f:
+            f.write(response.content)
+        logging.info("Model downloaded successfully.")
+
+    with open(MODEL_PATH, "rb") as f:
         model = pickle.load(f)
     logging.info("Model loaded successfully.")
 except Exception as e:
-    logging.error(f"Error loading model: {e}")
+    logging.error(f"❌ Error loading model: {e}")
+    model = None
 
 # Define input schema
 class InputData(BaseModel):
@@ -37,7 +44,7 @@ def home():
 def predict(data: InputData):
     if model is None:
         return {"error": "Model failed to load. Please check logs or model source."}
-    
+
     try:
         input_array = np.array(data.features).reshape(1, -1)
         prediction = model.predict(input_array)
